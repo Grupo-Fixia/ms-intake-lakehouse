@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-intake-lakehouse
+  namespace: apps
+  labels:
+    app: ms-intake-lakehouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ms-intake-lakehouse
+  template:
+    metadata:
+      labels:
+        app: ms-intake-lakehouse
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: ms-intake-lakehouse
+          image: ${IMAGE}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: KAFKA_HOST
+              value: "kafka-0.kafka.data.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "fixia.services.service-requests"
+            - name: KAFKA_GROUP_ID
+              value: "ms-intake-lakehouse"
+            - name: MINIO_HOST
+              value: "rustfs.data.svc.cluster.local:9000"
+            - name: MINIO_BUCKET
+              value: "lakehouse"
+            - name: MINIO_USE_SSL
+              value: "false"
+            - name: HTTP_PORT
+              value: "8080"
+          envFrom:
+            - secretRef:
+                name: ms-intake-lakehouse-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-intake-lakehouse
+  namespace: apps
+  labels:
+    app: ms-intake-lakehouse
+spec:
+  selector:
+    app: ms-intake-lakehouse
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+
