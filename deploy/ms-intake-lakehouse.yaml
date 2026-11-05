@@ -26,8 +26,8 @@ spec:
           env:
             - name: KAFKA_HOST
               value: "kafka-0.kafka.data.svc.cluster.local:9092"
-            - name: KAFKA_TOPIC
-              value: "fixia.services.service-requests"
+            - name: KAFKA_TOPICS
+              value: "fixia.services.service-requests,fixia.payments.events,fixia.users.evaluations"
             - name: KAFKA_GROUP_ID
               value: "ms-intake-lakehouse"
             - name: MINIO_HOST

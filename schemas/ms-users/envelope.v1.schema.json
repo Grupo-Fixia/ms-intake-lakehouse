@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fixia.local/schemas/events/ms-users/envelope.v1.schema.json",
+  "title": "Sobre de los eventos de ms-users (versión 1)",
+  "description": "Mismo sobre que GC-436 con producer ms-users. Cada tipo de evento restringe aggregate, actor y data en su propio esquema.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "schemaVersion",
+    "occurredAt",
+    "producer",
+    "aggregate",
+    "correlationId",
+    "actor",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+      "description": "Se genera al escribir el evento en el Outbox; no cambia en reintentos. Clave de idempotencia."
+    },
+    "eventType": {
+      "type": "string",
+      "enum": [
+        "evaluacion.registrada"
+      ]
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurredAt": {
+      "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/instant"
+    },
+    "producer": {
+      "const": "ms-users"
+    },
+    "aggregate": {
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "sequence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "Evaluation"
+          ]
+        },
+        "id": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "correlationId": {
+      "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+      "description": "Id de la solicitud de servicio (service_requests.id de ms-services) a la que pertenece el hecho; lo enlaza con los eventos del servicio."
+    },
+    "actor": {
+      "type": "object",
+      "required": [
+        "userId",
+        "role"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "userId": {
+          "oneOf": [
+            {
+              "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "CLIENT",
+            "PROFESSIONAL",
+            "SYSTEM"
+          ]
+        }
+      }
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}
