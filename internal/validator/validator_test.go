@@ -159,3 +159,82 @@ func TestValidator_UnknownType(t *testing.T) {
 	}
 }
 
+func TestValidator_PaymentAndUserEvents(t *testing.T) {
+	val, err := New()
+	if err != nil {
+		t.Fatalf("error initializing validator: %v", err)
+	}
+
+	paymentJSON := `{
+		"eventId": "e6161fce-64bd-46b1-8d49-818dce5390b8",
+		"eventType": "pago.procesado",
+		"schemaVersion": 1,
+		"occurredAt": "2026-11-02T20:02:55.536580Z",
+		"producer": "ms-payments",
+		"aggregate": { "type": "Payment", "id": "05717e69-811e-42db-8343-39fb9a16c99c", "sequence": 2 },
+		"correlationId": "11111111-1111-4111-8111-111111111111",
+		"actor": { "userId": "22222222-2222-4222-8222-222222222222", "role": "CLIENT" },
+		"data": {
+			"paymentId": "05717e69-811e-42db-8343-39fb9a16c99c",
+			"serviceRequestId": "11111111-1111-4111-8111-111111111111",
+			"contractId": "44444444-4444-4444-8444-444444444444",
+			"clientId": "22222222-2222-4222-8222-222222222222",
+			"providerId": "33333333-3333-4333-8333-333333333333",
+			"amount": { "amount": "120750.00", "currency": "COP" },
+			"breakdown": {
+				"price": { "amount": "105000.00", "currency": "COP" },
+				"commission": { "amount": "15750.00", "currency": "COP" },
+				"rate": "0.1500",
+				"ruleId": "00000000-0000-0000-0000-000000000015"
+			},
+			"status": "Processing"
+		}
+	}`
+
+	envPay, err := val.Validate([]byte(paymentJSON), "05717e69-811e-42db-8343-39fb9a16c99c", map[string]string{
+		"eventId":       "e6161fce-64bd-46b1-8d49-818dce5390b8",
+		"eventType":     "pago.procesado",
+		"schemaVersion": "1",
+	})
+	if err != nil {
+		t.Fatalf("expected valid payment event, got error: %v", err)
+	}
+	if envPay.Producer != "ms-payments" {
+		t.Errorf("expected producer ms-payments, got %s", envPay.Producer)
+	}
+
+	evalJSON := `{
+		"eventId": "f39dcca9-4808-4f3c-8550-1e0c245354ae",
+		"eventType": "evaluacion.registrada",
+		"schemaVersion": 1,
+		"occurredAt": "2026-11-05T00:56:58.123456Z",
+		"producer": "ms-users",
+		"aggregate": { "type": "Evaluation", "id": "51b56d3a-4c57-4c0b-8af2-86cc2c7baf69", "sequence": 1 },
+		"correlationId": "7cbb353a-ca95-4d11-b396-d70d057fbf3f",
+		"actor": { "userId": "03fe8fe1-441d-43c5-bc5b-91268a104f36", "role": "CLIENT" },
+		"data": {
+			"evaluationId": "51b56d3a-4c57-4c0b-8af2-86cc2c7baf69",
+			"serviceRequestId": "7cbb353a-ca95-4d11-b396-d70d057fbf3f",
+			"direction": "CLIENT_TO_PROVIDER",
+			"evaluatorId": "03fe8fe1-441d-43c5-bc5b-91268a104f36",
+			"evaluatedId": "92f16a59-ed52-4bb6-a513-0155c19bd172",
+			"rating": 5,
+			"source": "CONFIRMED_CLOSURE",
+			"serviceClosedAt": "2026-11-05T00:56:50.000000Z"
+		}
+	}`
+
+	// En ms-users, la clave del mensaje Kafka es evaluatedId
+	envEval, err := val.Validate([]byte(evalJSON), "92f16a59-ed52-4bb6-a513-0155c19bd172", map[string]string{
+		"eventId":       "f39dcca9-4808-4f3c-8550-1e0c245354ae",
+		"eventType":     "evaluacion.registrada",
+		"schemaVersion": "1",
+	})
+	if err != nil {
+		t.Fatalf("expected valid evaluation event with evaluatedId key, got error: %v", err)
+	}
+	if envEval.Producer != "ms-users" {
+		t.Errorf("expected producer ms-users, got %s", envEval.Producer)
+	}
+}
+
