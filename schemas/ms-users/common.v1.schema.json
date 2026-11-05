@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json",
+  "title": "Tipos comunes de los eventos de ms-users",
+  "description": "Mismas definiciones que common.v1 de ms-services (GC-436), para que este contrato no dependa de otro repositorio.",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$",
+      "description": "Instante en UTC, ISO-8601 con Z, como lo escribe Instant.toString() en Java."
+    }
+  }
+}

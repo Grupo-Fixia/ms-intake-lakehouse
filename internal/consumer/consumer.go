@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -30,14 +32,21 @@ type Consumer struct {
 }
 
 func New(cfg *config.Config, store *storage.Storage, val *validator.Validator) *Consumer {
+	topics := cfg.KafkaTopics
+	if len(topics) == 0 && cfg.KafkaTopic != "" {
+		topics = []string{cfg.KafkaTopic}
+	}
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:        []string{cfg.KafkaHost},
-		GroupID:        cfg.KafkaGroupID,
-		Topic:          cfg.KafkaTopic,
-		MinBytes:       10e3, // 10KB
-		MaxBytes:       10e6, // 10MB
-		CommitInterval: 0,    // Confirmación de offset estrictamente manual (GC-435)
-		StartOffset:    kafka.FirstOffset,
+		Brokers:                []string{cfg.KafkaHost},
+		GroupID:                cfg.KafkaGroupID,
+		GroupTopics:            topics,
+		WatchPartitionChanges:  true,
+		PartitionWatchInterval: 5 * time.Second,
+		MinBytes:               10e3, // 10KB
+		MaxBytes:               10e6, // 10MB
+		CommitInterval:         0,    // Confirmación de offset estrictamente manual (GC-435)
+		StartOffset:            kafka.FirstOffset,
 	})
 
 	return &Consumer{
@@ -45,6 +54,43 @@ func New(cfg *config.Config, store *storage.Storage, val *validator.Validator) *
 		storage:   store,
 		validator: val,
 		cfg:       cfg,
+	}
+}
+
+func (c *Consumer) ensureTopicsExist(ctx context.Context) {
+	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	conn, err := kafka.DialContext(dialCtx, "tcp", c.cfg.KafkaHost)
+	if err != nil {
+		log.Printf("Advertencia al conectar con Kafka (%s) para verificar tópicos: %v", c.cfg.KafkaHost, err)
+		return
+	}
+	defer conn.Close()
+
+	controller, err := conn.Controller()
+	if err != nil {
+		return
+	}
+
+	ctrlAddr := net.JoinHostPort(controller.Host, strconv.Itoa(controller.Port))
+	ctrlConn, err := kafka.DialContext(dialCtx, "tcp", ctrlAddr)
+	if err != nil {
+		ctrlConn = conn
+	} else {
+		defer ctrlConn.Close()
+	}
+
+	var topicConfigs []kafka.TopicConfig
+	for _, topic := range c.cfg.KafkaTopics {
+		topicConfigs = append(topicConfigs, kafka.TopicConfig{
+			Topic:             topic,
+			NumPartitions:     3,
+			ReplicationFactor: 1,
+		})
+	}
+	if len(topicConfigs) > 0 {
+		_ = ctrlConn.CreateTopics(topicConfigs...)
 	}
 }
 
@@ -60,8 +106,10 @@ func (c *Consumer) GetMetrics() Metrics {
 
 // Start inicia el bucle infinito de consumo de mensajes de Kafka.
 func (c *Consumer) Start(ctx context.Context) error {
-	log.Printf("Consumidor Lakehouse iniciado: Topic=%s, GroupID=%s, Broker=%s",
-		c.cfg.KafkaTopic, c.cfg.KafkaGroupID, c.cfg.KafkaHost)
+	c.ensureTopicsExist(ctx)
+
+	log.Printf("Consumidor Lakehouse iniciado: Topics=%v, GroupID=%s, Broker=%s",
+		c.cfg.KafkaTopics, c.cfg.KafkaGroupID, c.cfg.KafkaHost)
 
 	for {
 		select {
@@ -78,6 +126,7 @@ func (c *Consumer) Start(ctx context.Context) error {
 			}
 			log.Printf("Error al obtener mensaje de Kafka: %v. Reintentando en 2s...", err)
 			atomic.AddUint64(&c.metrics.ErrorsTotal, 1)
+			c.ensureTopicsExist(ctx)
 			time.Sleep(2 * time.Second)
 			continue
 		}
