@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fixia.local/schemas/events/ms-users/evaluacion.registrada.v1.schema.json",
+  "title": "evaluacion.registrada (versión 1)",
+  "description": "Un participante de un servicio cerrado evaluó a su contraparte (RF-051, RF-052, RN-012, GC-444). Se publica solo al crear la evaluación; repetir la misma no genera otro evento. No trae el comentario.",
+  "allOf": [
+    {
+      "$ref": "https://fixia.local/schemas/events/ms-users/envelope.v1.schema.json"
+    }
+  ],
+  "properties": {
+    "eventType": {
+      "const": "evaluacion.registrada"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "aggregate": {
+      "properties": {
+        "type": {
+          "const": "Evaluation"
+        },
+        "sequence": {
+          "const": 1,
+          "description": "Una evaluación es un hecho único e inmutable."
+        }
+      }
+    },
+    "actor": {
+      "required": [
+        "userId"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid"
+        },
+        "role": {
+          "enum": [
+            "CLIENT",
+            "PROFESSIONAL"
+          ]
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "evaluationId",
+        "serviceRequestId",
+        "direction",
+        "evaluatorId",
+        "evaluatedId",
+        "rating",
+        "source",
+        "serviceClosedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "evaluationId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Igual a aggregate.id."
+        },
+        "serviceRequestId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Igual a correlationId."
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "CLIENT_TO_PROVIDER",
+            "PROVIDER_TO_CLIENT"
+          ]
+        },
+        "evaluatorId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Igual a actor.userId."
+        },
+        "evaluatedId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Quien recibe la evaluación; también es la clave del mensaje."
+        },
+        "rating": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "CONFIRMED_CLOSURE"
+          ],
+          "description": "Origen de la evaluación (RF-055). ADMINISTRATIVE_RESOLUTION se agregará con las disputas."
+        },
+        "serviceClosedAt": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/instant",
+          "description": "Momento del cierre según ms-services."
+        }
+      }
+    }
+  }
+}

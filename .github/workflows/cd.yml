@@ -34,5 +34,5 @@ jobs:
           envsubst '${IMAGE}' < deploy/ms-intake-lakehouse.yaml | kubectl apply -f -
 
       - name: Wait for rollout
-        run: kubectl -n apps rollout status deployment/ms-intake-lakehouse --timeout=240s
+        run: kubectl -n apps rollout status deployment/ms-intake-lakehouse --timeout=420s
 

@@ -7,6 +7,11 @@ metadata:
     app: ms-intake-lakehouse
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: ms-intake-lakehouse
@@ -26,8 +31,8 @@ spec:
           env:
             - name: KAFKA_HOST
               value: "kafka-0.kafka.data.svc.cluster.local:9092"
-            - name: KAFKA_TOPIC
-              value: "fixia.services.service-requests"
+            - name: KAFKA_TOPICS
+              value: "fixia.services.service-requests,fixia.payments.events,fixia.users.evaluations"
             - name: KAFKA_GROUP_ID
               value: "ms-intake-lakehouse"
             - name: MINIO_HOST

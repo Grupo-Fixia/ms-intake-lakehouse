@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"path"
 	"strings"
 
 	"github.com/Grupo-Fixia/md-intake-lakehouse/schemas"
@@ -44,40 +45,77 @@ func New() (*Validator, error) {
 	compiler := jsonschema.NewCompiler()
 	compiler.Draft = jsonschema.Draft2020
 
-	entries, err := fs.ReadDir(schemas.FS, ".")
-	if err != nil {
-		return nil, fmt.Errorf("error al leer esquemas incrustados: %w", err)
+	type schemaEntry struct {
+		filePath   string
+		baseName   string
+		canonical  string
+		isRootDir  bool
+		isEventDoc bool
 	}
 
-	// 1. Registrar todos los esquemas en el compilador usando su URL canónica y nombre de archivo
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
-			content, err := fs.ReadFile(schemas.FS, entry.Name())
-			if err != nil {
-				return nil, fmt.Errorf("error al leer esquema %s: %w", entry.Name(), err)
-			}
+	var discovered []schemaEntry
 
-			canonicalURL := fmt.Sprintf("https://fixia.local/schemas/events/%s", entry.Name())
-			if err := compiler.AddResource(canonicalURL, bytes.NewReader(content)); err != nil {
-				return nil, fmt.Errorf("error al registrar recurso %s: %w", canonicalURL, err)
-			}
-			if err := compiler.AddResource(entry.Name(), bytes.NewReader(content)); err != nil {
-				return nil, fmt.Errorf("error al registrar recurso %s: %w", entry.Name(), err)
+	// 1. Recorrer todos los directorios de esquemas incrustados (ms-services, ms-payments, ms-users)
+	err := fs.WalkDir(schemas.FS, ".", func(filePath string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".json") {
+			return nil
+		}
+
+		content, err := fs.ReadFile(schemas.FS, filePath)
+		if err != nil {
+			return fmt.Errorf("error al leer esquema %s: %w", filePath, err)
+		}
+
+		var meta struct {
+			ID string `json:"$id"`
+		}
+		_ = json.Unmarshal(content, &meta)
+
+		canonicalURL := meta.ID
+		if canonicalURL == "" {
+			canonicalURL = fmt.Sprintf("https://fixia.local/schemas/events/%s", d.Name())
+		}
+
+		if err := compiler.AddResource(canonicalURL, bytes.NewReader(content)); err != nil {
+			return fmt.Errorf("error al registrar recurso %s: %w", canonicalURL, err)
+		}
+
+		isRoot := !strings.Contains(filePath, "/")
+		if isRoot {
+			if err := compiler.AddResource(d.Name(), bytes.NewReader(content)); err != nil {
+				return fmt.Errorf("error al registrar recurso %s: %w", d.Name(), err)
 			}
 		}
+
+		baseName := path.Base(filePath)
+		isEventDoc := baseName != "common.v1.schema.json" && (!isRoot && baseName != "envelope.v1.schema.json" || isRoot)
+		discovered = append(discovered, schemaEntry{
+			filePath:   filePath,
+			baseName:   baseName,
+			canonical:  canonicalURL,
+			isRootDir:  isRoot,
+			isEventDoc: isEventDoc,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error al cargar esquemas incrustados: %w", err)
 	}
 
 	// 2. Compilar los esquemas para cada tipo de evento
 	compiled := make(map[string]*jsonschema.Schema)
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") && entry.Name() != "common.v1.schema.json" {
-			canonicalURL := fmt.Sprintf("https://fixia.local/schemas/events/%s", entry.Name())
-			schema, err := compiler.Compile(canonicalURL)
-			if err != nil {
-				return nil, fmt.Errorf("error al compilar esquema %s: %w", entry.Name(), err)
-			}
-			compiled[entry.Name()] = schema
+	for _, item := range discovered {
+		if !item.isEventDoc {
+			continue
 		}
+		schema, err := compiler.Compile(item.canonical)
+		if err != nil {
+			return nil, fmt.Errorf("error al compilar esquema %s (%s): %w", item.filePath, item.canonical, err)
+		}
+		compiled[item.baseName] = schema
 	}
 
 	return &Validator{
@@ -93,10 +131,13 @@ func (v *Validator) Validate(payload []byte, messageKey string, headers map[stri
 		return nil, fmt.Errorf("JSON malformado o inválido: %w", err)
 	}
 
-	// B. Validar correspondencia con la clave del mensaje (debe ser aggregate.id)
+	// B. Validar correspondencia con la clave del mensaje (debe ser aggregate.id, o data.evaluatedId en evaluacion.registrada)
 	if messageKey != "" && envelope.Aggregate.ID != "" && messageKey != envelope.Aggregate.ID {
-		return nil, fmt.Errorf("la clave del mensaje Kafka (%s) no coincide con aggregate.id (%s)",
-			messageKey, envelope.Aggregate.ID)
+		evaluatedID, _ := envelope.Data["evaluatedId"].(string)
+		if !(envelope.EventType == "evaluacion.registrada" && evaluatedID != "" && messageKey == evaluatedID) {
+			return nil, fmt.Errorf("la clave del mensaje Kafka (%s) no coincide con aggregate.id (%s)",
+				messageKey, envelope.Aggregate.ID)
+		}
 	}
 
 	// C. Validar cabeceras mínimas si están presentes
