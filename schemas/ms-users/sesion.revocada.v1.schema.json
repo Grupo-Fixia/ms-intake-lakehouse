@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fixia.local/schemas/events/ms-users/sesion.revocada.v1.schema.json",
+  "title": "sesion.revocada (versión 1)",
+  "description": "Un usuario cerró su sesión y su access token quedó revocado (GC-547). Los demás servicios guardan el jti hasta expiresAt y deciden la revocación con esa lista, sin consultar a ms-users. Un cierre repetido no publica otro evento.",
+  "allOf": [
+    {
+      "$ref": "https://fixia.local/schemas/events/ms-users/envelope.v1.schema.json"
+    }
+  ],
+  "properties": {
+    "eventType": {
+      "const": "sesion.revocada"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "aggregate": {
+      "properties": {
+        "type": {
+          "const": "Session"
+        },
+        "sequence": {
+          "const": 1,
+          "description": "Un token se revoca una sola vez."
+        }
+      }
+    },
+    "actor": {
+      "required": [
+        "userId"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "El dueño de la sesión, que la cerró."
+        },
+        "role": {
+          "enum": [
+            "CLIENT",
+            "PROFESSIONAL",
+            "COMPANY",
+            "ADMIN"
+          ]
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "jti",
+        "expiresAt",
+        "revokedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "jti": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Identificador del access token revocado (claim jti). Igual a aggregate.id y a la clave del mensaje."
+        },
+        "expiresAt": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/instant",
+          "description": "Vencimiento del token: después de este momento no hay que recordarlo."
+        },
+        "revokedAt": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/instant"
+        }
+      }
+    }
+  }
+}
