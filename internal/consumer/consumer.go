@@ -23,12 +23,24 @@ type Metrics struct {
 	ErrorsTotal      uint64 `json:"errors_total"`
 }
 
+type messageReader interface {
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
+type eventStorage interface {
+	StoreEvent(ctx context.Context, producer, eventType string, schemaVersion int, occurredAt string, eventID string, payload []byte, metadata map[string]string) (bool, error)
+	StoreQuarantine(ctx context.Context, topic string, partition int, offset int64, payload []byte, reason string) error
+}
+
 type Consumer struct {
-	reader    *kafka.Reader
-	storage   *storage.Storage
-	validator *validator.Validator
-	cfg       *config.Config
-	metrics   Metrics
+	reader     messageReader
+	storage    eventStorage
+	validator  *validator.Validator
+	cfg        *config.Config
+	metrics    Metrics
+	retryDelay time.Duration
 }
 
 func New(cfg *config.Config, store *storage.Storage, val *validator.Validator) *Consumer {
@@ -43,18 +55,32 @@ func New(cfg *config.Config, store *storage.Storage, val *validator.Validator) *
 		GroupTopics:            topics,
 		WatchPartitionChanges:  true,
 		PartitionWatchInterval: 5 * time.Second,
-		MinBytes:               10e3, // 10KB
-		MaxBytes:               10e6, // 10MB
-		CommitInterval:         0,    // Confirmación de offset estrictamente manual (GC-435)
+		MinBytes:               1,                      // Entrega inmediata sin esperar acumular 10KB
+		MaxBytes:               10e6,                   // 10MB
+		MaxWait:                500 * time.Millisecond, // Baja latencia por poll
+		HeartbeatInterval:      1 * time.Second,
+		SessionTimeout:         6 * time.Second,        // Rebalanceo rápido tras reinicio (<6s en vez de 42-56s)
+		RebalanceTimeout:       6 * time.Second,
+		JoinGroupBackoff:       500 * time.Millisecond,
+		CommitInterval:         0,                      // Confirmación de offset estrictamente manual (GC-435)
 		StartOffset:            kafka.FirstOffset,
 	})
 
 	return &Consumer{
-		reader:    reader,
-		storage:   store,
-		validator: val,
-		cfg:       cfg,
+		reader:     reader,
+		storage:    store,
+		validator:  val,
+		cfg:        cfg,
+		retryDelay: 2 * time.Second,
 	}
+}
+
+func (c *Consumer) sleepRetry() {
+	d := c.retryDelay
+	if d <= 0 {
+		d = 2 * time.Second
+	}
+	time.Sleep(d)
 }
 
 func (c *Consumer) ensureTopicsExist(ctx context.Context) {
@@ -122,12 +148,13 @@ func (c *Consumer) Start(ctx context.Context) error {
 		msg, err := c.reader.FetchMessage(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				return nil
+				log.Println("Deteniendo consumidor Lakehouse y enviando LeaveGroup a Kafka...")
+				return c.reader.Close()
 			}
 			log.Printf("Error al obtener mensaje de Kafka: %v. Reintentando en 2s...", err)
 			atomic.AddUint64(&c.metrics.ErrorsTotal, 1)
 			c.ensureTopicsExist(ctx)
-			time.Sleep(2 * time.Second)
+			c.sleepRetry()
 			continue
 		}
 
@@ -160,7 +187,10 @@ func (c *Consumer) processMessageWithRetry(ctx context.Context, msg kafka.Messag
 			}
 			log.Printf("Error escribiendo en cuarentena RustFS: %v. Reintentando en 2s...", errQ)
 			atomic.AddUint64(&c.metrics.ErrorsTotal, 1)
-			time.Sleep(2 * time.Second)
+			if ctx.Err() != nil {
+				return
+			}
+			c.sleepRetry()
 		}
 	}
 
@@ -197,7 +227,10 @@ func (c *Consumer) processMessageWithRetry(ctx context.Context, msg kafka.Messag
 		// Fallo en almacenamiento: no confirmar offset y reintentar con backoff
 		log.Printf("Fallo al persistir evento en RustFS: %v. Reintentando en 2s...", errStore)
 		atomic.AddUint64(&c.metrics.ErrorsTotal, 1)
-		time.Sleep(2 * time.Second)
+		if ctx.Err() != nil {
+			return
+		}
+		c.sleepRetry()
 	}
 }
 
