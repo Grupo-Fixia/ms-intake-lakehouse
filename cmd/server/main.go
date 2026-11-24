@@ -46,8 +46,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Iniciar consumidor en segundo plano
+	// Iniciar consumidor en segundo plano y registrar su cierre limpio (LeaveGroup)
+	consumerDone := make(chan struct{})
 	go func() {
+		defer close(consumerDone)
 		if err := cons.Start(ctx); err != nil {
 			log.Printf("Consumidor Kafka detenido con error: %v", err)
 		}
@@ -91,6 +93,12 @@ func main() {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	_ = server.Shutdown(shutdownCtx)
+
+	select {
+	case <-consumerDone:
+	case <-time.After(5 * time.Second):
+		log.Println("Tiempo de espera agotado cerrando consumidor Kafka.")
+	}
 
 	log.Println("ms-intake-lakehouse finalizado correctamente.")
 }
