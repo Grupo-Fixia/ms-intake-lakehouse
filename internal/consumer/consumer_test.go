@@ -168,8 +168,11 @@ func TestProcessDuplicateAndFetchError(t *testing.T) {
 		t.Fatalf("listen err: %v", err)
 	}
 	go func() {
-		conn, err := ln.Accept()
-		if err == nil {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
 			_ = conn.Close()
 		}
 	}()
