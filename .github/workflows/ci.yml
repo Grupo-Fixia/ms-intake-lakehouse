@@ -18,8 +18,12 @@ jobs:
         with:
           go-version: '1.22'
           cache: true
-      - name: Run Go Tests
-        run: go test -v ./...
+      - name: Run Go Tests with Coverage (Quality Gate >= 80%)
+        run: |
+          go test -v -coverprofile=coverage.out ./internal/...
+          TOTAL_COV=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
+          echo "Cobertura total: ${TOTAL_COV}%"
+          awk -v cov="$TOTAL_COV" 'BEGIN { if (cov + 0 < 80.0) { printf "ERROR: Cobertura %.1f%% es menor al umbral requerido de 80.0%%\n", cov; exit 1 } }'
 
   build:
     needs: test

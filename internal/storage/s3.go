@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"time"
@@ -13,8 +14,15 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+type objectClient interface {
+	BucketExists(ctx context.Context, bucketName string) (bool, error)
+	MakeBucket(ctx context.Context, bucketName string, opts minio.MakeBucketOptions) error
+	StatObject(ctx context.Context, bucketName, objectName string, opts minio.StatObjectOptions) (minio.ObjectInfo, error)
+	PutObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+}
+
 type Storage struct {
-	client *minio.Client
+	client objectClient
 	bucket string
 }
 
