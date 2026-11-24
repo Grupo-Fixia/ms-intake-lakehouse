@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fixia.local/schemas/events/ms-users/empresa.tecnico_vinculado.v1.schema.json",
+  "title": "empresa.tecnico_vinculado (versión 1)",
+  "description": "Un técnico independiente aceptó la invitación de una empresa y quedó asociado a ella (GC-524, contrato de empresas §6.3). Sin correo, nombre ni documento.",
+  "allOf": [
+    {
+      "$ref": "https://fixia.local/schemas/events/ms-users/envelope.v1.schema.json"
+    }
+  ],
+  "properties": {
+    "eventType": {
+      "const": "empresa.tecnico_vinculado"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "aggregate": {
+      "properties": {
+        "type": {
+          "const": "CompanyMembership"
+        },
+        "sequence": {
+          "const": 1,
+          "description": "La vinculación es la secuencia 1 de la asociación y la desvinculación la 2."
+        }
+      }
+    },
+    "actor": {
+      "required": [
+        "userId"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "El técnico: acepta la invitación o se desvincula. La empresa no desvincula (P1)."
+        },
+        "role": {
+          "const": "PROFESSIONAL"
+        }
+      }
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "companyId",
+        "companyAdminUserId",
+        "technicianUserId",
+        "invitationId",
+        "joinedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "companyId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "companies.id de ms-users."
+        },
+        "companyAdminUserId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Cuenta administradora de la empresa: es el providerId de la empresa en ms-services y ms-payments."
+        },
+        "technicianUserId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "Igual a actor.userId y a la clave del mensaje."
+        },
+        "invitationId": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
+          "description": "La invitación aceptada."
+        },
+        "joinedAt": {
+          "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/instant"
+        }
+      }
+    }
+  }
+}
