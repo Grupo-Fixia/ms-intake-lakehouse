@@ -24,7 +24,10 @@
     "eventType": {
       "type": "string",
       "enum": [
-        "evaluacion.registrada"
+        "evaluacion.registrada",
+        "empresa.tecnico_vinculado",
+        "empresa.tecnico_desvinculado",
+        "sesion.revocada"
       ]
     },
     "schemaVersion": {
@@ -49,7 +52,9 @@
         "type": {
           "type": "string",
           "enum": [
-            "Evaluation"
+            "Evaluation",
+            "CompanyMembership",
+            "Session"
           ]
         },
         "id": {
@@ -63,7 +68,7 @@
     },
     "correlationId": {
       "$ref": "https://fixia.local/schemas/events/ms-users/common.v1.schema.json#/$defs/uuid",
-      "description": "Id de la solicitud de servicio (service_requests.id de ms-services) a la que pertenece el hecho; lo enlaza con los eventos del servicio."
+      "description": "Enlaza hechos relacionados. En evaluacion.registrada es el id de la solicitud de servicio (service_requests.id de ms-services); en los eventos de empresa (GC-524) es la asociación (company_technicians.id), que une la vinculación con su desvinculación."
     },
     "actor": {
       "type": "object",
@@ -88,6 +93,8 @@
           "enum": [
             "CLIENT",
             "PROFESSIONAL",
+            "COMPANY",
+            "ADMIN",
             "SYSTEM"
           ]
         }

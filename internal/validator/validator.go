@@ -131,10 +131,13 @@ func (v *Validator) Validate(payload []byte, messageKey string, headers map[stri
 		return nil, fmt.Errorf("JSON malformado o inválido: %w", err)
 	}
 
-	// B. Validar correspondencia con la clave del mensaje (debe ser aggregate.id, o data.evaluatedId en evaluacion.registrada)
+	// B. Validar correspondencia con la clave del mensaje (debe ser aggregate.id, o data.evaluatedId en evaluacion.registrada, o data.technicianUserId en eventos de empresa)
 	if messageKey != "" && envelope.Aggregate.ID != "" && messageKey != envelope.Aggregate.ID {
 		evaluatedID, _ := envelope.Data["evaluatedId"].(string)
-		if !(envelope.EventType == "evaluacion.registrada" && evaluatedID != "" && messageKey == evaluatedID) {
+		techUserID, _ := envelope.Data["technicianUserId"].(string)
+		isEvalMatch := envelope.EventType == "evaluacion.registrada" && evaluatedID != "" && messageKey == evaluatedID
+		isCompanyTechMatch := (envelope.EventType == "empresa.tecnico_vinculado" || envelope.EventType == "empresa.tecnico_desvinculado") && techUserID != "" && messageKey == techUserID
+		if !isEvalMatch && !isCompanyTechMatch {
 			return nil, fmt.Errorf("la clave del mensaje Kafka (%s) no coincide con aggregate.id (%s)",
 				messageKey, envelope.Aggregate.ID)
 		}
