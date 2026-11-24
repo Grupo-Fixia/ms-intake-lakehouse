@@ -25,9 +25,6 @@ func (m *mockReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
 	if m.fetchErr != nil {
 		err := m.fetchErr
 		m.fetchErr = nil
-		if m.cancelFunc != nil {
-			m.cancelFunc()
-		}
 		return kafka.Message{}, err
 	}
 	if m.idx < len(m.messages) {
